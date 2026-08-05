@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Marginal</title>
+<link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">“</span>
+      <span class="brand-name">Marginal</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="compose">New Clip</button>
+      <button class="tab-btn" data-tab="feed">Feed</button>
+      <button class="tab-btn" data-tab="me">Me</button>
+    </nav>
+    <div class="topbar-actions">
+      <a id="open-main-app" class="btn ghost small hidden" target="_blank" rel="noopener">Open main site</a>
+    </div>
+  </header>
+
+  <main id="app">
+
+    <!-- AUTH VIEW -->
+    <section id="view-auth" class="view hidden">
+      <h2>Sign in to Marginal</h2>
+      <p class="muted">Publish clips, follow people, and build your commentary feed.</p>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="••••••••" />
+      </div>
+      <div class="field hidden" id="signup-username-field">
+        <label>Username</label>
+        <input type="text" id="auth-username" placeholder="jcal_fan" />
+      </div>
+      <div class="auth-actions">
+        <button id="btn-login" class="btn primary">Log in</button>
+        <button id="btn-signup" class="btn ghost">Sign up instead</button>
+      </div>
+      <p id="auth-error" class="error hidden"></p>
+      <p class="muted small">Not configured yet? Edit <code>config.js</code> with your Supabase URL + anon key.</p>
+    </section>
+
+    <!-- COMPOSE VIEW -->
+    <section id="view-compose" class="view hidden">
+      <div id="compose-empty" class="empty-state hidden">
+        <p>Highlight any passage on a page, then click <strong>“Clip this”</strong> to bring it here.</p>
+      </div>
+      <div id="compose-form" class="hidden">
+        <div class="quote-card">
+          <blockquote id="compose-quote"></blockquote>
+          <div class="source-line">
+            <span id="compose-source-domain" class="chip"></span>
+            <a id="compose-source-link" href="#" target="_blank" rel="noopener">View original ↗</a>
+          </div>
+        </div>
+        <div class="field">
+          <label>Your take</label>
+          <textarea id="compose-commentary" rows="5" placeholder="What's your hot take?"></textarea>
+        </div>
+        <button id="btn-publish" class="btn primary full">Publish clip</button>
+        <button id="btn-discard" class="btn ghost full">Discard</button>
+        <p id="compose-error" class="error hidden"></p>
+        <p id="compose-success" class="success hidden"></p>
+      </div>
+    </section>
+
+    <!-- FEED VIEW -->
+    <section id="view-feed" class="view hidden">
+      <div class="feed-controls">
+        <div class="feed-search">
+          <input type="search" id="feed-search" placeholder="Search notes and authors" />
+          <button id="feed-search-btn" class="btn ghost">Search</button>
+        </div>
+        <div class="feed-toggle">
+          <button class="chip-btn active" data-scope="all">Discover</button>
+          <button class="chip-btn" data-scope="following">Following</button>
+        </div>
+      </div>
+      <div id="feed-list" class="feed-list">
+        <p class="muted">Loading…</p>
+      </div>
+    </section>
+
+    <!-- ME VIEW -->
+    <section id="view-me" class="view hidden">
+      <div id="me-profile"></div>
+      <div class="me-controls">
+        <input type="search" id="me-search" placeholder="Search my notes" />
+        <button id="me-search-btn" class="btn ghost">Search</button>
+      </div>
+      <h3 class="section-title">My clips</h3>
+      <div id="me-clips" class="feed-list"></div>
+      <button id="btn-logout" class="btn ghost full">Log out</button>
+    </section>
+
+  </main>
+
+  <script src="vendor/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
