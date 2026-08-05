@@ -10,6 +10,6 @@ window.MARGINAL_CONFIG = {
   // Where your public webapp (feed.html / clip.html) is deployed.
   // e.g. "https://marginal-app.netlify.app" — no trailing slash.
   WEBAPP_URL: "https://incandescent-sorbet-95f83d.netlify.app",
-  // Optional: Google AI key for built-in summarization.
-  GOOGLE_API_KEY: "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"
+  // Optional: point to your backend proxy that holds the OpenAI key.
+  AI_PROXY_URL: "http://localhost:3000"
 };

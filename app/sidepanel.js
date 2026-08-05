@@ -6,7 +6,7 @@ const cfg = window.MARGINAL_CONFIG || {};
 console.log("Marginal config", {
   supabaseUrl: !!cfg.SUPABASE_URL,
   anonKey: !!cfg.SUPABASE_ANON_KEY,
-  googleApiKey: !!cfg.GOOGLE_API_KEY,
+  aiProxyUrl: !!cfg.AI_PROXY_URL,
   webappUrl: !!cfg.WEBAPP_URL
 });
 const supabaseClient = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
@@ -274,7 +274,7 @@ function buildSearchFilter(searchTerm, query) {
   if (!searchTerm) return query;
   const term = `%${searchTerm.replace(/%/g, "\\%")}%`;
   return query.or(
-    `quoted_text.ilike.${term},commentary.ilike.${term},author_username.ilike.${term}`
+    `quoted_text.ilike.${term},commentary.ilike.${term}`
   );
 }
 
@@ -589,6 +589,28 @@ async function searchAndSummarize(query) {
 
 async function fetchSummarization(prompt, noteText) {
   const query = noteText || prompt;
+  const proxyUrl = cfg.AI_PROXY_URL ? cfg.AI_PROXY_URL.replace(/\/$/, "") : null;
+
+  if (proxyUrl) {
+    try {
+      const response = await fetch(`${proxyUrl}/summarize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, noteText: query })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && typeof data.summary === "string" && data.summary.trim()) {
+          return { text: data.summary.trim(), html: false };
+        }
+      } else {
+        console.warn("Marginal: AI proxy responded with error", response.status, await response.text());
+      }
+    } catch (err) {
+      console.warn("Marginal: AI proxy request failed", err);
+    }
+  }
+
   return localSummarize(query);
 }
 

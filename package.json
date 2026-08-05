@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "start-backend": "node server.js"
+  },
   "dependencies": {
     "@supabase/server": "^1.4.1"
   }
