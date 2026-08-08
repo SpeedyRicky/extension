@@ -3,10 +3,10 @@
 // "Clip this" button, and hands the selected passage + page context
 // off to the side panel when clicked.
 (function () {
-  const safeConsole = {
-    log: typeof console !== "undefined" && typeof console.log === "function" ? console.log.bind(console) : () => {},
-    warn: typeof console !== "undefined" && typeof console.warn === "function" ? console.warn.bind(console) : () => {},
-    error: typeof console !== "undefined" && typeof console.error === "function" ? console.error.bind(console) : () => {}
+  const SafeConsole = {
+    log: typeof SafeConsole !== "undefined" && typeof SafeConsole.log === "function" ? SafeConsole.log.bind(SafeConsole) : () => {},
+    warn: typeof SafeConsole !== "undefined" && typeof SafeConsole.warn === "function" ? SafeConsole.warn.bind(SafeConsole) : () => {},
+    error: typeof SafeConsole !== "undefined" && typeof SafeConsole.error === "function" ? SafeConsole.error.bind(SafeConsole) : () => {}
   };
 
   let btn = null;
@@ -59,7 +59,7 @@ function createButton(x, y) {
           return chromeRuntime;
         }
       } catch (err) {
-        safeConsole.warn("Clipper: chrome runtime check failed", err);
+        SafeConsole.warn("Clipper: chrome runtime check failed", err);
       }
     }
 
@@ -70,7 +70,7 @@ function createButton(x, y) {
           return browserRuntime;
         }
       } catch (err) {
-        safeConsole.warn("Clipper: browser runtime check failed", err);
+        SafeConsole.warn("Clipper: browser runtime check failed", err);
       }
     }
 
@@ -82,7 +82,7 @@ function createButton(x, y) {
       try {
         chrome.storage.local.set({ clipper_pending_clip: payload }, () => {});
       } catch (err) {
-        safeConsole.warn("Clipper: failed to save pending clip locally", err);
+        SafeConsole.warn("Clipper: failed to save pending clip locally", err);
       }
     }
   }
@@ -90,7 +90,7 @@ function createButton(x, y) {
   function sendExtensionMessage(message, callback) {
     const runtime = getExtensionRuntime();
     if (!runtime) {
-      safeConsole.warn("Clipper: extension runtime unavailable", {
+      SafeConsole.warn("Clipper: extension runtime unavailable", {
         chrome: typeof chrome !== "undefined" ? chrome : undefined,
         browser: typeof browser !== "undefined" ? browser : undefined
       });
@@ -103,14 +103,14 @@ function createButton(x, y) {
       try {
         chrome.runtime.sendMessage(message, (response) => {
           if (chrome.runtime.lastError) {
-            console.warn("Clipper: extension messaging error", chrome.runtime.lastError, message);
+            SafeConsole.warn("Clipper: extension messaging error", chrome.runtime.lastError, message);
             if (typeof callback === "function") callback(null);
             return;
           }
           if (typeof callback === "function") callback(response);
         });
       } catch (err) {
-        safeConsole.warn("Clipper: extension messaging failed", err, message);
+        SafeConsole.warn("Clipper: extension messaging failed", err, message);
         if (typeof callback === "function") callback(null);
       }
       return;
@@ -118,7 +118,7 @@ function createButton(x, y) {
 
     const send = runtime.sendMessage;
     if (typeof send !== "function") {
-      console.warn("Clipper: runtime.sendMessage is not a function", {
+      SafeConsole.warn("Clipper: runtime.sendMessage is not a function", {
         runtimeType: typeof runtime,
         runtimeKeys: Object.keys(runtime || {}).slice(0, 20)
       });
@@ -133,14 +133,14 @@ function createButton(x, y) {
         maybePromise.then((response) => {
           if (typeof callback === "function") callback(response);
         }).catch((err) => {
-          console.warn("Clipper: extension messaging error", err, message);
+          SafeConsole.warn("Clipper: extension messaging error", err, message);
           if (typeof callback === "function") callback(null);
         });
       } else {
         if (typeof callback === "function") callback(null);
       }
     } catch (err) {
-      safeConsole.warn("Clipper: extension messaging error", err, { message });
+      SafeConsole.warn("Clipper: extension messaging error", err, { message });
       showToast("Extension messaging failed.");
       if (typeof callback === "function") callback(null);
     }
