@@ -2,8 +2,8 @@
 // Handles auth, composing a clip from a captured selection,
 // publishing to Supabase, and rendering the feed / profile.
 
-const cfg = window.MARGINAL_CONFIG || {};
-console.log("Marginal config", {
+const cfg = window.CLIPPER_CONFIG || {};
+console.log("Clipper config", {
   supabaseUrl: !!cfg.SUPABASE_URL,
   anonKey: !!cfg.SUPABASE_ANON_KEY,
   aiProxyUrl: !!cfg.AI_PROXY_URL,
@@ -26,8 +26,70 @@ let currentProfile = null;
 let pendingClip = null;
 let isSignupMode = false;
 let feedScope = "all";
+let feedSort = "newest";
+
+const FAVORITE_STORAGE_PREFIX = "clipper_favorites_";
 
 const $ = (id) => document.getElementById(id);
+
+function getFavoriteStorageKey() {
+  return `${FAVORITE_STORAGE_PREFIX}${currentUser?.id || "anon"}`;
+}
+
+function readFavoriteClips() {
+  try {
+    const raw = window.localStorage.getItem(getFavoriteStorageKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    console.warn("Clipper: failed to read favorites", err);
+    return [];
+  }
+}
+
+function saveFavoriteClips(clips) {
+  try {
+    window.localStorage.setItem(getFavoriteStorageKey(), JSON.stringify(clips));
+  } catch (err) {
+    console.warn("Clipper: failed to save favorites", err);
+  }
+}
+
+function isClipFavorited(id) {
+  return readFavoriteClips().some((clip) => clip.id === id);
+}
+
+function toggleClipFavorite(clip) {
+  const favorites = readFavoriteClips();
+  const existing = favorites.find((item) => item.id === clip.id);
+  let updated;
+  if (existing) {
+    updated = favorites.filter((item) => item.id !== clip.id);
+  } else {
+    updated = [...favorites.filter((item) => item.id !== clip.id), clip];
+  }
+  saveFavoriteClips(updated);
+  return !existing;
+}
+
+function setSortActive() {
+  document.querySelectorAll(".sort-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.sort === feedSort);
+  });
+}
+
+function showReviewResult(text) {
+  const target = $("review-result");
+  if (!target) return;
+  target.textContent = text;
+  target.classList.remove("hidden");
+}
+
+function clearReviewResult() {
+  const target = $("review-result");
+  if (!target) return;
+  target.textContent = "";
+  target.classList.add("hidden");
+}
 
 function slugify() {
   return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -142,23 +204,68 @@ function getExtensionRuntime() {
 function sendPanelMessage(message, callback) {
   const runtime = getExtensionRuntime();
   if (!runtime) {
-    console.warn("Marginal: panel runtime unavailable", message);
+    console.warn("Clipper: panel runtime unavailable", message);
     if (typeof callback === "function") callback(null);
     return;
   }
+
+  if (typeof chrome !== "undefined" && runtime === chrome.runtime) {
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn("Clipper: panel messaging error", chrome.runtime.lastError, message);
+          if (typeof callback === "function") callback(null);
+          return;
+        }
+        if (typeof callback === "function") callback(response);
+      });
+    } catch (err) {
+      console.warn("Clipper: panel messaging failed", err, message);
+      if (typeof callback === "function") callback(null);
+    }
+    return;
+  }
+
   try {
-    runtime.sendMessage(message, callback);
+    const promise = runtime.sendMessage(message);
+    if (promise && typeof promise.then === "function") {
+      promise.then((response) => {
+        if (typeof callback === "function") callback(response);
+      }).catch((err) => {
+        console.warn("Clipper: panel messaging failed", err, message);
+        if (typeof callback === "function") callback(null);
+      });
+    } else {
+      if (typeof callback === "function") callback(null);
+    }
   } catch (err) {
-    console.warn("Marginal: panel messaging failed", err, message);
+    console.warn("Clipper: panel messaging failed", err, message);
     if (typeof callback === "function") callback(null);
   }
+}
+
+function readPendingClipFromStorage() {
+  return new Promise((resolve) => {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && typeof chrome.storage.local.get === "function") {
+      chrome.storage.local.get(["clipper_pending_clip"], (result) => {
+        resolve(result?.clipper_pending_clip || null);
+      });
+    } else {
+      resolve(null);
+    }
+  });
 }
 
 // ---------- Compose ----------
 async function loadPendingClip() {
   return new Promise((resolve) => {
-    sendPanelMessage({ type: "MARGINAL_GET_PENDING_CLIP" }, (res) => {
-      resolve(res?.payload || null);
+    sendPanelMessage({ type: "CLIPPER_GET_PENDING_CLIP" }, async (res) => {
+      if (res?.payload) {
+        resolve(res.payload);
+        return;
+      }
+      const savedClip = await readPendingClipFromStorage();
+      resolve(savedClip || null);
     });
   });
 }
@@ -187,7 +294,7 @@ async function renderCompose() {
 }
 
 $("btn-discard").addEventListener("click", () => {
-  sendPanelMessage({ type: "MARGINAL_CLEAR_PENDING_CLIP" });
+  sendPanelMessage({ type: "CLIPPER_CLEAR_PENDING_CLIP" });
   pendingClip = null;
   renderCompose();
 });
@@ -209,7 +316,7 @@ $("btn-publish").addEventListener("click", async () => {
     });
     if (error) throw error;
 
-    sendPanelMessage({ type: "MARGINAL_CLEAR_PENDING_CLIP" });
+    sendPanelMessage({ type: "CLIPPER_CLEAR_PENDING_CLIP" });
     pendingClip = null;
     $("compose-success").textContent = "Published! Check the Feed tab.";
     $("compose-success").classList.remove("hidden");
@@ -240,11 +347,28 @@ feedSearchButton.addEventListener("click", () => {
   loadFeed(feedSearchInput.value.trim());
 });
 
+document.querySelectorAll(".sort-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    feedSort = btn.dataset.sort || "newest";
+    setSortActive();
+    clearReviewResult();
+    loadFeed(feedSearchInput.value.trim());
+  });
+});
+
+$("btn-topic-review").addEventListener("click", () => {
+  reviewTopic(feedSearchInput.value.trim());
+});
+
+$("btn-recent-review").addEventListener("click", () => {
+  reviewRecentNotes();
+});
+
 meSearchButton.addEventListener("click", () => {
   loadMe(meSearchInput.value.trim());
 });
 
-function clipCardHtml(c, showDelete = false) {
+function clipCardHtml(c, showDelete = false, isFavorite = false) {
   const link = `${webappUrl}/clip.html?slug=${encodeURIComponent(c.slug)}`;
   const claimBadge = c.claim_status === "filed"
     ? '<span class="claim-badge">Claim filed</span>' : "";
@@ -258,6 +382,7 @@ function clipCardHtml(c, showDelete = false) {
       ${c.commentary ? `<div class="commentary">${escapeHtml(c.commentary)}</div>` : ""}
       <div class="card-actions">
         <button class="btn ghost summary-btn" type="button">Summarize note</button>
+        <button class="btn ghost favorite-btn" type="button">${isFavorite ? 'Unfavorite' : 'Favorite'}</button>
         ${showDelete ? '<button class="btn ghost delete-btn" type="button">Delete note</button>' : ''}
       </div>
       <div class="summary-block hidden">
@@ -278,8 +403,34 @@ function buildSearchFilter(searchTerm, query) {
   );
 }
 
+async function loadFavoriteFeed(searchTerm = "") {
+  const favorites = readFavoriteClips();
+  const filtered = favorites.filter((clip) => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (`${clip.quoted_text || ""} ${clip.commentary || ""}`)
+      .toLowerCase().includes(term);
+  });
+  if (filtered.length === 0) {
+    $("feed-list").innerHTML = '<p class="muted">No favorite clips found.</p>';
+    clearReviewResult();
+    return;
+  }
+  $("feed-list").innerHTML = filtered
+    .map((clip) => clipCardHtml(clip, currentUser && clip.author_id === currentUser.id, true))
+    .join("");
+  attachSummaryButtons();
+  attachFavoriteButtons();
+  clearReviewResult();
+}
+
 async function loadFeed(searchTerm = "") {
   $("feed-list").innerHTML = '<p class="muted">Loading…</p>';
+  clearReviewResult();
+  if (feedSort === "favorites") {
+    await loadFavoriteFeed(searchTerm);
+    return;
+  }
   try {
     let query = supabaseClient.from("clips_feed").select("*").limit(30);
 
@@ -298,6 +449,16 @@ async function loadFeed(searchTerm = "") {
       query = query.in("author_id", ids);
     }
 
+    try {
+      if (feedSort === "newest") {
+        query = query.order("created_at", { ascending: false });
+      } else if (feedSort === "oldest") {
+        query = query.order("created_at", { ascending: true });
+      }
+    } catch (e) {
+      console.warn("Clipper: could not apply sort order", e);
+    }
+
     const { data, error } = await query;
     if (error) throw error;
     if (!data || data.length === 0) {
@@ -305,9 +466,10 @@ async function loadFeed(searchTerm = "") {
       return;
     }
     $("feed-list").innerHTML = data
-      .map((clip) => clipCardHtml(clip, currentUser && clip.author_id === currentUser.id))
+      .map((clip) => clipCardHtml(clip, currentUser && clip.author_id === currentUser.id, isClipFavorited(clip.id)))
       .join("");
     attachSummaryButtons();
+    attachFavoriteButtons();
   } catch (e) {
     $("feed-list").innerHTML = `<p class="error">${escapeHtml(e.message || "Failed to load feed.")}</p>`;
   }
@@ -344,7 +506,7 @@ async function loadMe(searchTerm = "") {
 const panelRuntime = getExtensionRuntime();
 if (panelRuntime && panelRuntime.onMessage && typeof panelRuntime.onMessage.addListener === "function") {
   panelRuntime.onMessage.addListener((message) => {
-    if (message.type === "MARGINAL_PENDING_CLIP_UPDATED") {
+    if (message.type === "CLIPPER_PENDING_CLIP_UPDATED") {
       pendingClip = message.payload;
       goTo("compose");
     }
@@ -378,11 +540,13 @@ function attachSummaryButtons() {
           summaryText.textContent = result.text;
         }
       } catch (err) {
-        console.error("Marginal: summarization failed", err);
+        console.error("Clipper: summarization failed", err);
         summaryText.innerHTML = buildSearchFallbackHtml(noteText);
       }
     });
   });
+
+  attachFavoriteButtons();
 
   document.querySelectorAll(".delete-btn").forEach((button) => {
     button.addEventListener("click", async (event) => {
@@ -406,6 +570,33 @@ function attachSummaryButtons() {
         clipCard.remove();
       } catch (err) {
         alert(err?.message || "Failed to delete note.");
+      }
+    });
+  });
+}
+
+function attachFavoriteButtons() {
+  document.querySelectorAll(".favorite-btn").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      const clipCard = event.target.closest(".clip-card");
+      if (!clipCard) return;
+      const clipId = clipCard.dataset.clipId;
+      if (!clipId) return;
+      const quote = clipCard.querySelector("blockquote").textContent || "";
+      const commentary = clipCard.querySelector(".commentary")?.textContent || "";
+      const clip = {
+        id: clipId,
+        quoted_text: quote.replace(/^"|"$/g, ""),
+        commentary,
+        source_domain: clipCard.querySelector(".meta-row span")?.textContent || "",
+        author_display_name: clipCard.querySelector(".author-row")?.textContent || "",
+        author_username: "",
+        slug: "",
+      };
+      const isNowFavorite = toggleClipFavorite(clip);
+      button.textContent = isNowFavorite ? "Unfavorite" : "Favorite";
+      if (feedSort === "favorites" && !isNowFavorite) {
+        loadFavoriteFeed($("feed-search").value.trim());
       }
     });
   });
@@ -522,6 +713,48 @@ function buildSearchFallbackHtml(noteText) {
   return `AI summarization failed. <a href="${searchUrl}" target="_blank" rel="noopener">Search for it on Google</a>`;
 }
 
+function makeReviewPrompt(topic, notes) {
+  const content = notes
+    .map((clip, index) => `Clip ${index + 1}: "${clip.quoted_text || ""}" ${clip.commentary || ""}`)
+    .join("\n\n");
+  return topic
+    ? `Give a complete review of the topic ${topic}. Use the notes as examples and explain how they relate to it.\n\nNotes:\n${content}`
+    : `Give a complete review of these recent notes, explaining the main trends and key points clearly.\n\nNotes:\n${content}`;
+}
+
+async function reviewTopic(searchTerm) {
+  clearReviewResult();
+  const topic = searchTerm || "the current feed topic";
+  const prompt = makeReviewPrompt(topic, []);
+  showReviewResult("Review in progress...");
+  try {
+    const result = await fetchSummarization(prompt, topic);
+    showReviewResult(result.text || "No review available.");
+  } catch (err) {
+    console.error("Clipper: topic review failed", err);
+    showReviewResult("Topic review failed. Try again later.");
+  }
+}
+
+async function reviewRecentNotes() {
+  clearReviewResult();
+  showReviewResult("Preparing recent notes review...");
+  try {
+    const query = supabaseClient.from("clips_feed").select("*").order("created_at", { ascending: false }).limit(5);
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      showReviewResult("No recent notes available for review.");
+      return;
+    }
+    const prompt = makeReviewPrompt("recent notes", data);
+    const result = await fetchSummarization(prompt, prompt);
+    showReviewResult(result.text || "No review available.");
+  } catch (err) {
+    console.error("Clipper: recent notes review failed", err);
+    showReviewResult("Recent notes review failed. Try again later.");
+  }
+}
+
 async function callGoogleSummarization(prompt) {
   return localSummarize(prompt).text;
 }
@@ -604,10 +837,10 @@ async function fetchSummarization(prompt, noteText) {
           return { text: data.summary.trim(), html: false };
         }
       } else {
-        console.warn("Marginal: AI proxy responded with error", response.status, await response.text());
+        console.warn("Clipper: AI proxy responded with error", response.status, await response.text());
       }
     } catch (err) {
-      console.warn("Marginal: AI proxy request failed", err);
+      console.warn("Clipper: AI proxy request failed", err);
     }
   }
 

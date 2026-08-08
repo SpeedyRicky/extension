@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Marginal — Clip & Comment on Anything",
+  "name": "ClipNoter — Clip & Comment on Anything",
   "version": "1.0.0",
   "description": "Highlight any passage on the web, add your take, and publish it to a public feed that always links back to the source.",
   "icons": {
@@ -12,7 +12,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Open Marginal",
+    "default_title": "Open clipper",
     "default_icon": {
       "128": "icons/icon128.png"
     }
@@ -29,6 +29,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:3000"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:3000 https://lgdbyynrarikfnyjunaw.supabase.co https://*.supabase.co https://*.supabase.in"
   }
 }

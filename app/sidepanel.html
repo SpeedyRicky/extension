@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Marginal</title>
+<title>Clipper</title>
 <link rel="stylesheet" href="sidepanel.css" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark">“</span>
-      <span class="brand-name">Marginal</span>
+      <span class="brand-name">Clipper</span>
     </div>
     <nav class="tabs" id="tabs">
       <button class="tab-btn active" data-tab="compose">New Clip</button>
@@ -25,7 +25,7 @@
 
     <!-- AUTH VIEW -->
     <section id="view-auth" class="view hidden">
-      <h2>Sign in to Marginal</h2>
+      <h2>Sign in to Clipper</h2>
       <p class="muted">Publish clips, follow people, and build your commentary feed.</p>
       <div class="field">
         <label>Email</label>
@@ -75,14 +75,26 @@
     <section id="view-feed" class="view hidden">
       <div class="feed-controls">
         <div class="feed-search">
-          <input type="search" id="feed-search" placeholder="Search notes and authors" />
+          <input type="search" id="feed-search" placeholder="Search note text and topics" />
           <button id="feed-search-btn" class="btn ghost">Search</button>
         </div>
         <div class="feed-toggle">
           <button class="chip-btn active" data-scope="all">Discover</button>
           <button class="chip-btn" data-scope="following">Following</button>
         </div>
+        <div class="feed-sort">
+          <div class="feed-sort-group">
+            <button class="sort-btn active" data-sort="newest">Newest</button>
+            <button class="sort-btn" data-sort="oldest">Oldest</button>
+            <button class="sort-btn" data-sort="favorites">Favorites</button>
+          </div>
+          <div class="review-buttons">
+            <button id="btn-topic-review" class="btn ghost">Review topic</button>
+            <button id="btn-recent-review" class="btn ghost">Review recent</button>
+          </div>
+        </div>
       </div>
+      <div id="review-result" class="review-result hidden"></div>
       <div id="feed-list" class="feed-list">
         <p class="muted">Loading…</p>
       </div>

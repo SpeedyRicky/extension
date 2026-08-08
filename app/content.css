@@ -1,4 +1,4 @@
-#marginal-clip-btn {
+#clipper-clip-btn {
   position: absolute;
   z-index: 2147483647;
   display: flex;
@@ -14,13 +14,13 @@
   box-shadow: 0 6px 20px rgba(0,0,0,.25);
   transition: transform .12s ease, background .12s ease;
 }
-#marginal-clip-btn:hover {
+#clipper-clip-btn:hover {
   background: #2563eb;
   transform: translateY(-1px);
 }
-#marginal-clip-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+#clipper-clip-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-#marginal-toast {
+#clipper-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -32,9 +32,9 @@
   font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   box-shadow: 0 8px 24px rgba(0,0,0,.3);
   max-width: 280px;
-  animation: marginal-fade-in .15s ease;
+  animation: clipper-fade-in .15s ease;
 }
-@keyframes marginal-fade-in {
+@keyframes clipper-fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
