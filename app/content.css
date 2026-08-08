@@ -1,11 +1,11 @@
 #clipper-clip-btn {
-  position: fixed;
-  z-index: 2147483647;
-  display: flex;
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
   align-items: center;
   gap: 6px;
-  background: #171717;
-  color: #fff;
+  background: #171717 !important;
+  color: #fff !important;
   border: none;
   border-radius: 999px;
   padding: 8px 14px;
