@@ -31,20 +31,25 @@
 
 function createButton(x, y) {
   removeButton();
-    btn = document.createElement("button");
-    btn.id = "clipper-clip-btn";
-    btn.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4a2 2 0 00-2 2v1H3v2h2v6H3v2h2v1a2 2 0 002 2h2v-2H7v-1a2 2 0 00-1-1.73A2 2 0 008 12a2 2 0 001-1.27A2 2 0 007 9V8h2V6H7V4h2V2H7z"/></svg>' +
-      "Clip this";
-    btn.style.left = x + "px";
-    btn.style.top = y + "px";
-    btn.addEventListener("mousedown", (e) => {
-      // prevent the mousedown from collapsing the selection before click fires
-      e.preventDefault();
-    });
-    btn.addEventListener("click", handleClipClick);
-    document.body.appendChild(btn);
-  }
+
+  btn = document.createElement("button");
+  btn.id = "clipper-clip-btn";
+
+  btn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4a2 2 0 00-2 2v1H3v2h2v6H3v2h2v1a2 2 0 002 2h2v-2H7v-1a2 2 0 00-1-1.73A2 2 0 008 12a2 2 0 001-1.27A2 2 0 007 9V8h2V6H7V4h2V2H7z"/></svg>' +
+    "Clip this";
+
+  btn.style.left = x + "px";
+  btn.style.top = y + "px";
+
+  btn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+  });
+
+  btn.addEventListener("click", handleClipClick);
+
+  document.documentElement.appendChild(btn);
+}
 
   function getExtensionRuntime() {
     if (typeof chrome !== "undefined") {
