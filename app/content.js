@@ -2,11 +2,12 @@
 // Detects a text selection anywhere on the page, shows a floating
 // "Clip this" button, and hands the selected passage + page context
 // off to the side panel when clicked.
+
 (function () {
   const SafeConsole = {
-    log: typeof SafeConsole !== "undefined" && typeof SafeConsole.log === "function" ? SafeConsole.log.bind(SafeConsole) : () => {},
-    warn: typeof SafeConsole !== "undefined" && typeof SafeConsole.warn === "function" ? SafeConsole.warn.bind(SafeConsole) : () => {},
-    error: typeof SafeConsole !== "undefined" && typeof SafeConsole.error === "function" ? SafeConsole.error.bind(SafeConsole) : () => {}
+  log() {},
+  warn() {},
+  error() {}
   };
 
   let btn = null;
