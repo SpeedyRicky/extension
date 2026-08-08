@@ -29,11 +29,8 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
-  function createButton(x, y) {
-    if (!getExtensionRuntime()) {
-      return;
-    }
-    removeButton();
+function createButton(x, y) {
+  removeButton();
     btn = document.createElement("button");
     btn.id = "clipper-clip-btn";
     btn.innerHTML =
@@ -183,21 +180,26 @@
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         const x = Math.min(
-          window.scrollX + rect.left + rect.width / 2 - 50,
-          window.scrollX + document.documentElement.clientWidth - 130
-        );
-        const y = window.scrollY + rect.top - 44;
-        createButton(Math.max(8, x), Math.max(8, y));
+        rect.left + rect.width / 2 - 50,
+        window.innerWidth - 130
+    );
+
+const y = Math.max(8, rect.top - 44);
+
+createButton(Math.max(8, x), y);
       } else {
         removeButton();
       }
     }, 5);
   });
 
-  document.addEventListener("mousedown", (e) => {
-    if (e.target && e.target.id === "clipper-clip-btn") return;
-    removeButton();
-  });
+document.addEventListener("mousedown", (e) => {
+  if (btn && (e.target === btn || btn.contains(e.target))) {
+    return;
+  }
+
+  removeButton();
+});
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") removeButton();
