@@ -1,213 +1,390 @@
-// Clipper — content script
-// Detects a text selection anywhere on the page, shows a floating
-// "Clip this" button, and hands the selected passage + page context
-// off to the side panel when clicked.
+"use strict";
 
-(function () {
-  const SafeConsole = {
-  log() {},
-  warn() {},
-  error() {}
-  };
+(() => {
+  const BUTTON_ID = "clipper-clip-btn";
+  const TOAST_ID = "clipper-toast";
 
-  let btn = null;
-  let lastSelectionText = "";
+  let clipButton = null;
+  let lastSelectedText = "";
+  let toastTimer = null;
 
-  function removeButton() {
-    if (btn) {
-      btn.remove();
-      btn = null;
-    }
-  }
-
-  function showToast(message) {
-    const existing = document.getElementById("clipper-toast");
-    if (existing) existing.remove();
-    const toast = document.createElement("div");
-    toast.id = "clipper-toast";
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
-
-function createButton(x, y) {
-  removeButton();
-
-  btn = document.createElement("button");
-  btn.id = "clipper-clip-btn";
-
-  btn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4a2 2 0 00-2 2v1H3v2h2v6H3v2h2v1a2 2 0 002 2h2v-2H7v-1a2 2 0 00-1-1.73A2 2 0 008 12a2 2 0 001-1.27A2 2 0 007 9V8h2V6H7V4h2V2H7z"/></svg>' +
-    "Clip this";
-
-  btn.style.left = x + "px";
-  btn.style.top = y + "px";
-
-  btn.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-  });
-
-  btn.addEventListener("click", handleClipClick);
-
-  document.documentElement.appendChild(btn);
-}
-
-  function getExtensionRuntime() {
-    if (typeof chrome !== "undefined") {
-      try {
-        const chromeRuntime = chrome && chrome.runtime;
-        if (chromeRuntime && typeof chromeRuntime.sendMessage === "function") {
-          return chromeRuntime;
-        }
-      } catch (err) {
-        SafeConsole.warn("Clipper: chrome runtime check failed", err);
+  function getRuntime() {
+    try {
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.runtime &&
+        typeof chrome.runtime.sendMessage === "function"
+      ) {
+        return chrome.runtime;
       }
-    }
-
-    if (typeof browser !== "undefined") {
-      try {
-        const browserRuntime = browser && browser.runtime;
-        if (browserRuntime && typeof browserRuntime.sendMessage === "function") {
-          return browserRuntime;
-        }
-      } catch (err) {
-        SafeConsole.warn("Clipper: browser runtime check failed", err);
-      }
+    } catch {
+      return null;
     }
 
     return null;
   }
 
-  function savePendingClipLocally(payload) {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local && typeof chrome.storage.local.set === "function") {
-      try {
-        chrome.storage.local.set({ clipper_pending_clip: payload }, () => {});
-      } catch (err) {
-        SafeConsole.warn("Clipper: failed to save pending clip locally", err);
-      }
-    }
-  }
+  function sendMessage(message, callback) {
+    const runtime = getRuntime();
 
-  function sendExtensionMessage(message, callback) {
-    const runtime = getExtensionRuntime();
     if (!runtime) {
-      SafeConsole.warn("Clipper: extension runtime unavailable", {
-        chrome: typeof chrome !== "undefined" ? chrome : undefined,
-        browser: typeof browser !== "undefined" ? browser : undefined
-      });
-      showToast("Extension runtime unavailable. Please reload Clipper.");
-      if (typeof callback === "function") callback(null);
-      return;
-    }
-
-    if (typeof chrome !== "undefined" && runtime === chrome.runtime) {
-      try {
-        chrome.runtime.sendMessage(message, (response) => {
-          if (chrome.runtime.lastError) {
-            SafeConsole.warn("Clipper: extension messaging error", chrome.runtime.lastError, message);
-            if (typeof callback === "function") callback(null);
-            return;
-          }
-          if (typeof callback === "function") callback(response);
-        });
-      } catch (err) {
-        SafeConsole.warn("Clipper: extension messaging failed", err, message);
-        if (typeof callback === "function") callback(null);
-      }
-      return;
-    }
-
-    const send = runtime.sendMessage;
-    if (typeof send !== "function") {
-      SafeConsole.warn("Clipper: runtime.sendMessage is not a function", {
-        runtimeType: typeof runtime,
-        runtimeKeys: Object.keys(runtime || {}).slice(0, 20)
-      });
-      showToast("Extension messaging unavailable.");
-      if (typeof callback === "function") callback(null);
+      callback?.(null);
       return;
     }
 
     try {
-      const maybePromise = send.call(runtime, message);
-      if (maybePromise && typeof maybePromise.then === "function") {
-        maybePromise.then((response) => {
-          if (typeof callback === "function") callback(response);
-        }).catch((err) => {
-          SafeConsole.warn("Clipper: extension messaging error", err, message);
-          if (typeof callback === "function") callback(null);
-        });
-      } else {
-        if (typeof callback === "function") callback(null);
-      }
-    } catch (err) {
-      SafeConsole.warn("Clipper: extension messaging error", err, { message });
-      showToast("Extension messaging failed.");
-      if (typeof callback === "function") callback(null);
+      runtime.sendMessage(message, (response) => {
+        try {
+          void chrome.runtime.lastError;
+        } catch {}
+
+        callback?.(response ?? null);
+      });
+    } catch {
+      callback?.(null);
     }
   }
 
-  function handleClipClick() {
-    const text = lastSelectionText.trim();
-    if (!text) return;
+  function removeButton() {
+    if (!clipButton) {
+      return;
+    }
 
-    const payload = {
-      quotedText: text,
-      sourceUrl: location.href,
-      sourceTitle: document.title,
-      sourceDomain: location.hostname
+    try {
+      clipButton.remove();
+    } catch {}
+
+    clipButton = null;
+  }
+
+  function showToast(message) {
+    const existing = document.getElementById(TOAST_ID);
+
+    if (existing) {
+      existing.remove();
+    }
+
+    const toast = document.createElement("div");
+
+    toast.id = TOAST_ID;
+    toast.textContent = message;
+
+    document.documentElement.appendChild(toast);
+
+    clearTimeout(toastTimer);
+
+    toastTimer = setTimeout(() => {
+      try {
+        toast.remove();
+      } catch {}
+    }, 2800);
+  }
+
+  function getSelectionText() {
+    try {
+      const selection = window.getSelection();
+
+      if (!selection) {
+        return "";
+      }
+
+      return selection.toString().trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function buildClip() {
+    const text = lastSelectedText.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    const url = window.location.href;
+
+    try {
+      new URL(url);
+    } catch {
+      return null;
+    }
+
+    return {
+      quotedText: text.slice(0, 20000),
+      sourceUrl: url,
+      sourceTitle:
+        document.title?.trim().slice(0, 500) ||
+        window.location.hostname,
+      sourceDomain: window.location.hostname
     };
+  }
 
-    savePendingClipLocally(payload);
+  function saveFallback(clip) {
+    try {
+      chrome.storage.local.set(
+        {
+          clipnoter_pending_clip: clip
+        },
+        () => {
+          try {
+            void chrome.runtime.lastError;
+          } catch {}
+        }
+      );
+    } catch {}
+  }
 
-    sendExtensionMessage(
-      { type: "CLIPPER_NEW_CLIP", payload },
-      () => {
-        showToast("Clip captured — opening Clipper…");
+  function clipSelection() {
+    const clip = buildClip();
+
+    if (!clip) {
+      showToast("Select some text first.");
+      return;
+    }
+
+    saveFallback(clip);
+
+    sendMessage(
+      {
+        type: "CLIPNOTER_NEW_CLIP",
+        payload: clip
+      },
+      (response) => {
+        if (response?.ok) {
+          showToast("Clip saved — opening ClipNoter…");
+        } else {
+          showToast(
+            "Clip saved. Open ClipNoter from the toolbar."
+          );
+        }
       }
     );
 
-    // best-effort: also open the side panel directly if the API allows it
-    sendExtensionMessage({ type: "CLIPPER_OPEN_PANEL" });
+    sendMessage({
+      type: "CLIPNOTER_OPEN_PANEL"
+    });
 
     removeButton();
-    window.getSelection()?.removeAllRanges();
+
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {}
   }
 
-  document.addEventListener("mouseup", (e) => {
-    // ignore clicks on our own button
-    if (e.target && e.target.id === "clipper-clip-btn") return;
+  function positionButton(rect) {
+    if (!clipButton || !rect) {
+      return;
+    }
 
-    setTimeout(() => {
-      const selection = window.getSelection();
-      const text = selection ? selection.toString() : "";
-      if (text && text.trim().length > 0) {
-        lastSelectionText = text;
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        const x = Math.min(
-        rect.left + rect.width / 2 - 50,
-        window.innerWidth - 130
+    const buttonWidth = 112;
+    const buttonHeight = 40;
+    const padding = 8;
+
+    let left =
+      rect.left +
+      rect.width / 2 -
+      buttonWidth / 2;
+
+    let top =
+      rect.top -
+      buttonHeight -
+      10;
+
+    left = Math.max(
+      padding,
+      Math.min(
+        left,
+        window.innerWidth -
+          buttonWidth -
+          padding
+      )
     );
 
-const y = Math.max(8, rect.top - 44);
+    if (top < padding) {
+      top = rect.bottom + 10;
+    }
 
-createButton(Math.max(8, x), y);
-      } else {
-        removeButton();
-      }
-    }, 5);
-  });
+    top = Math.max(
+      padding,
+      Math.min(
+        top,
+        window.innerHeight -
+          buttonHeight -
+          padding
+      )
+    );
 
-document.addEventListener("mousedown", (e) => {
-  if (btn && (e.target === btn || btn.contains(e.target))) {
-    return;
+    clipButton.style.left = `${left}px`;
+    clipButton.style.top = `${top}px`;
   }
 
-  removeButton();
-});
+  function createButton(rect) {
+    removeButton();
 
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") removeButton();
-  });
+    clipButton = document.createElement("button");
+
+    clipButton.id = BUTTON_ID;
+    clipButton.type = "button";
+
+    clipButton.setAttribute(
+      "aria-label",
+      "Clip selected text with ClipNoter"
+    );
+
+    clipButton.innerHTML = `
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          d="M16 3a3 3 0 0 1 3 3v5h-2V6a1 1 0 0 0-1-1h-3V3h3ZM8 21a3 3 0 0 1-3-3v-5h2v5a1 1 0 0 0 1 1h3v2H8Zm8-15H8a2 2 0 0 0-2 2v8h2V8h8v8h2V8a2 2 0 0 0-2-2Z"
+        />
+      </svg>
+
+      <span>Clip this</span>
+    `;
+
+    clipButton.addEventListener(
+      "mousedown",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      true
+    );
+
+    clipButton.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        clipSelection();
+      }
+    );
+
+    document.documentElement.appendChild(
+      clipButton
+    );
+
+    positionButton(rect);
+  }
+
+  function handleSelection() {
+    setTimeout(() => {
+      const text = getSelectionText();
+
+      if (!text) {
+        removeButton();
+        return;
+      }
+
+      if (text.length < 2) {
+        removeButton();
+        return;
+      }
+
+      lastSelectedText = text;
+
+      try {
+        const selection = window.getSelection();
+
+        if (
+          !selection ||
+          selection.rangeCount === 0
+        ) {
+          removeButton();
+          return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+
+        if (
+          !rect ||
+          (!rect.width && !rect.height)
+        ) {
+          removeButton();
+          return;
+        }
+
+        createButton(rect);
+      } catch {
+        removeButton();
+      }
+    }, 20);
+  }
+
+  document.addEventListener(
+    "mouseup",
+    (event) => {
+      if (
+        clipButton &&
+        (
+          event.target === clipButton ||
+          clipButton.contains(event.target)
+        )
+      ) {
+        return;
+      }
+
+      handleSelection();
+    },
+    false
+  );
+
+  document.addEventListener(
+    "mousedown",
+    (event) => {
+      if (
+        clipButton &&
+        (
+          event.target === clipButton ||
+          clipButton.contains(event.target)
+        )
+      ) {
+        return;
+      }
+
+      removeButton();
+    },
+    false
+  );
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") {
+        removeButton();
+      }
+    },
+    false
+  );
+
+  window.addEventListener(
+    "scroll",
+    removeButton,
+    {
+      passive: true
+    }
+  );
+
+  window.addEventListener(
+    "resize",
+    removeButton,
+    {
+      passive: true
+    }
+  );
+
+  let previousUrl = location.href;
+
+  setInterval(() => {
+    if (location.href !== previousUrl) {
+      previousUrl = location.href;
+      removeButton();
+      lastSelectedText = "";
+    }
+  }, 1000);
 })();

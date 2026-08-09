@@ -1,49 +1,195 @@
-// Clipper — background service worker
-// Relays captured clips from the content script to the side panel,
-// and opens the side panel on toolbar-icon click or on a fresh clip.
+"use strict";
 
-let pendingClip = null;
+const PENDING_CLIP_KEY = "clipnoter_pending_clip";
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "CLIPPER_NEW_CLIP") {
-    pendingClip = message.payload;
-    chrome.storage.local.set({ clipper_pending_clip: message.payload });
-    // notify any open side panel instance immediately
+function storageGet(key) {
+  return new Promise((resolve) => {
     try {
-      const maybePromise = chrome.runtime.sendMessage({ type: "CLIPPER_PENDING_CLIP_UPDATED", payload: message.payload });
-      if (maybePromise && typeof maybePromise.catch === "function") {
-        maybePromise.catch(() => {});
-      }
-    } catch (err) {
-      console.warn("Clipper: failed to broadcast pending clip update", err);
+      chrome.storage.local.get([key], (result) => {
+        void chrome.runtime.lastError;
+        resolve(result?.[key] ?? null);
+      });
+    } catch {
+      resolve(null);
     }
-    sendResponse({ ok: true });
+  });
+}
+
+function storageSet(values) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.set(values, () => {
+        void chrome.runtime.lastError;
+        resolve();
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
+function storageRemove(key) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.remove(key, () => {
+        void chrome.runtime.lastError;
+        resolve();
+      });
+    } catch {
+      resolve();
+    }
+  });
+}
+
+function sendRuntimeMessage(message) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        void chrome.runtime.lastError;
+        resolve(response ?? null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function validateClip(payload) {
+  if (!payload || typeof payload !== "object") {
+    return false;
   }
 
-  if (message.type === "CLIPPER_OPEN_PANEL" && sender.tab && sender.tab.windowId != null) {
-    chrome.sidePanel.open({ windowId: sender.tab.windowId }).catch(() => {});
+  if (
+    typeof payload.quotedText !== "string" ||
+    !payload.quotedText.trim()
+  ) {
+    return false;
   }
 
-  if (message.type === "CLIPPER_GET_PENDING_CLIP") {
-    chrome.storage.local.get(["clipper_pending_clip"], (result) => {
-      sendResponse({ payload: result.clipper_pending_clip || null });
-    });
-    return true; // async response
+  if (
+    typeof payload.sourceUrl !== "string" ||
+    !payload.sourceUrl.trim()
+  ) {
+    return false;
   }
 
-  if (message.type === "CLIPPER_CLEAR_PENDING_CLIP") {
-    chrome.storage.local.remove("clipper_pending_clip");
-    pendingClip = null;
+  try {
+    new URL(payload.sourceUrl);
+  } catch {
+    return false;
   }
-});
+
+  return true;
+}
+
+chrome.runtime.onMessage.addListener(
+  (message, sender, sendResponse) => {
+    if (!message || typeof message.type !== "string") {
+      return false;
+    }
+
+    if (message.type === "CLIPNOTER_NEW_CLIP") {
+      const payload = message.payload;
+
+      if (!validateClip(payload)) {
+        sendResponse({
+          ok: false,
+          error: "Invalid clip."
+        });
+
+        return false;
+      }
+
+      void storageSet({
+        [PENDING_CLIP_KEY]: payload
+      }).then(() => {
+        void sendRuntimeMessage({
+          type: "CLIPNOTER_PENDING_CLIP_UPDATED",
+          payload
+        });
+      });
+
+      sendResponse({
+        ok: true
+      });
+
+      return false;
+    }
+
+    if (message.type === "CLIPNOTER_GET_PENDING_CLIP") {
+      storageGet(PENDING_CLIP_KEY).then((payload) => {
+        sendResponse({
+          ok: true,
+          payload
+        });
+      });
+
+      return true;
+    }
+
+    if (message.type === "CLIPNOTER_CLEAR_PENDING_CLIP") {
+      storageRemove(PENDING_CLIP_KEY).then(() => {
+        sendResponse({
+          ok: true
+        });
+      });
+
+      return true;
+    }
+
+    if (message.type === "CLIPNOTER_OPEN_PANEL") {
+      const windowId = sender?.tab?.windowId;
+
+      if (typeof windowId !== "number") {
+        sendResponse({
+          ok: false,
+          error: "No browser window found."
+        });
+
+        return false;
+      }
+
+      chrome.sidePanel
+        .open({
+          windowId
+        })
+        .then(() => {
+          sendResponse({
+            ok: true
+          });
+        })
+        .catch(() => {
+          sendResponse({
+            ok: false,
+            error: "Unable to open the side panel."
+          });
+        });
+
+      return true;
+    }
+
+    return false;
+  }
+);
 
 chrome.action.onClicked.addListener((tab) => {
-  if (tab.windowId != null) {
-    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+  const windowId = tab?.windowId;
+
+  if (typeof windowId !== "number") {
+    return;
   }
+
+  chrome.sidePanel
+    .open({
+      windowId
+    })
+    .catch(() => {});
 });
 
-// Allow the toolbar icon to open the panel on any site by default.
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  chrome.sidePanel
+    .setPanelBehavior({
+      openPanelOnActionClick: true
+    })
+    .catch(() => {});
 });
